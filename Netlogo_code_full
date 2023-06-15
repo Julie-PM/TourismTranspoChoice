@@ -1,0 +1,692 @@
+;; NetLogo program code of the approach proposed in our article
+;; Several files recover simulated data (see the end of the program)
+;; Some parameters have been set in the "Interface" section and have to be defined int this "Interface" section
+
+extensions [matrix]
+
+globals [
+  dist_aero ;; distance airport - accommodation / distance aéroport - hebergement
+  m1 ;; matrix of distances between each site / matrice des distances entre chaques sites
+  color_site ;; color associated with the site / couleur associé au site
+  liste_capacite ;; max number of people that can go for each site / nombre de personnes max pouvant aller pour chaque site
+ distot_bus ;; total distance traveled in km by bus / distance parcourue totale en km en bus
+  distot_vt ;; total distance traveled in km in thermal car / distance parcourue totale en km en voitutre thermique
+  distot_ve ;; total distance traveled in km by electric car / distance parcourue totale en km en voiture electrique
+  take_bus ;; number of tourists taking the bus / nombre de touristes qui prennent le bus
+  take_car ;; number of tourists who take the thermal car / nombre de touristes qui prennent la voiture thermique
+  take_electric_car ;; number of tourists who take the electric car / nombre de touristes qui prennent la voiture electrique
+
+]
+
+
+
+turtles-own [
+  dist ;; distance traveled / distance parcourue
+   distance_bus ;; distance traveled by bus / distance parcourue en prenant le bus
+  distance_voiture_t ;; distance traveled by thermal car / parcourue en prenant une voiture thermique
+  distance_voiture_e ;; distance traveled by electric car  / distance parcourue en prenant une voiture electrique
+  list_site ;; list of sites to visit in order of priority / liste des sites à visiter par ordre de priorités
+  list_site_deja_visites ;; lists of sites already visited: 1= already visited and 0= not yet visited / listes des sites déjà visités: 1= déjà visité et 0= pas encore visité
+  JA ;; arrival day / jour d'arrivé
+  hebergement ;; place of accommodation of the tourist ie corresponds to a number in the list of sites to visit (1 2 or 3) / lieu d'hébergement du touriste ie correspond à un numero dans la listes des sites à visiter ( 1 2 ou 3)
+ list_vide ;; if he has finished or not to visit all the sites 1 the list is empty if not 0 ie list not empty / si il a fini ou pas de visiter tous les sites 1 la liste est vide sinon 0 ie liste non vide
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; Pour la listes des sites à visiter, la liste des sites deja visité et hébergement, on a :
+  ;; For the list of sites to visit, the list of sites already visited and accommodation, we have:
+  ;; 1 = Gosier (city with beaches)
+  ;; 2 = St François (city with beaches)
+  ;; 3 = Cote sous le vent (places with beaches and dive)
+  ;; 4 = Capesterre (cities with falls)
+  ;; 5 = Parc national (National Park mainly with rain forest)
+  ;; 6 = soufrière (Volcano)
+  ;; 7 = falaise Anse Bertrand (cites with beaxhes and cliff)
+  ;; 8 = marché Point à Pitre (city with market and souvenirs)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  seuil_taxe ;; not used in this simulation / une valeur aléatoire comprise entre 0 et 100 sur le montant qu'ils sont prets à payer pour prendre la voiture
+  radin_ecolo
+  transport ;; transport: thermal car, 2 = bus, 3 = electric car / type de transport : 1= voiture thermique / 2 = bus / 3 = voiture electrique
+  sensible_sub ;;  membership degree to the group of tourists sensitive to the environment in a subjective way / degré d’appartenance au groupe de touristes sensibles à l'envirionnement de manière subjective
+  sensible_obj ;; membership degree to the group of tourists sensitive to the environment in an objective way / degré d’appartenance au groupe de touristes sensibles à l'envirionnement de manière objective
+  insensible_sub ;;membership degree to the group of tourists sensitive to the environment in a subjective way /  degré d’appartenance au groupe de touristes insensibles à l'envirionnement de manière subjective
+  insensible_obj ;; membership degree to the group of tourists sensitive to the environment in an objective way / degré d’appartenance au groupe de touristes insensibles à l'envirionnement de manière objective
+
+
+]
+
+to setup
+  clear-all
+  set distot_bus 0
+  set distot_ve 0
+  set distot_vt 0
+  set take_car 0
+  set take_bus 0
+  set take_electric_car 0
+  create-turtles Nb_touristes [
+  setxy  0 0
+  set shape "person"
+   ask patch -15 11 ;; coordinates for the site:  / coordonnés pour le site : Côte sous le vent (3)
+    [ set pcolor cyan ]
+   ask patch -11  4  ;; coordinates for the site:  /  coordonnés pour le site: Parc National (5)
+    [ set pcolor green ]
+   ask patch -8  -2 ;; coordinates for the site:  / coordonnées pour le site: Capesterre (4)
+    [ set pcolor sky ]
+   ask patch -10  -11 ;; coordinates for the site:  /  coordonnées pour le site : Soufrière (6)
+    [ set pcolor brown ]
+     ask patch 8  15 ;; coordinates for the site:  / coordonnées pour le site: Anse Bertrand (7)
+    [ set pcolor violet ]
+    ask patch 2 -2  ;; coordinates for the site:  / coordonnées pour le site : POint à Pitre (musée, marché) (8)
+    [ set pcolor gray ]
+    ask patch 6 -7 ;; coordinates for the site:  / coordonnées pour le site: Le gosier (1)
+  [ set pcolor orange ]
+     ask patch 15 -4 ;; coordinates for the site:  / coordonnées pour le site: St François (2)
+    [ set pcolor yellow ]
+  ]
+  set color_site [ orange yellow cyan sky green brown violet gray ]
+  ask turtles [
+    set distance_voiture_t 0
+    set distance_voiture_e 0
+    set distance_bus 0
+    set hebergement -1
+    set list_site [ -1 -1 -1 -1 -1 -1 -1 -1 ]
+    set sensible_sub -1
+    set sensible_obj -1
+    set insensible_sub -1
+    set insensible_obj -1
+
+  ]
+setup_touriste
+
+
+ ;; let nb_touristes_Gosier 0
+ ;; set nb_touristes_Gosier count turtles with [ pxcor = 6 and pycor = -7 ]
+;;  print nb_touristes_Gosier
+  set dist_aero [ 8.6 34.9 44.4 ]
+
+  set m1 matrix:from-row-list [
+    [ 0 29.4 48.3 53.2 25.5 68 39.8 6.9 ]  [ 29.2 0 76.2 81.2 53.2 95 45.2 36.1] [ 48.3 76.2 0 65  36.6 44.1 73 41.1 ]
+ [ 53.2 81.2 65 0 39.6 31.7 81 47.1 ] [25.5 53.2 36.6 39.6 0 51 50 21.9] [ 68 95 44.1 31.7 51 0 93 61]
+ [ 39.8 45.2 73 81 50 93 0 33.5] [ 6.9 36.1 41.1 47.1 21.9 61 33.5 0 ]
+]
+ ;; let grande_capacite Nb_touristes * 0.5
+  set liste_capacite [ 60 60 60 60 60 60 60 60 ]
+
+
+  reset-ticks
+
+end
+
+;;;;;;;;;;;;;;;;;;
+;;; extensions [matrix]
+
+;;;;
+
+ to setup_touriste
+  ;;; Breakdown of accommodation for tourists: 60% in Le Gosier, 24% in ST François and the rest in the leeward coast, ie 16% (based on the figures from INSEE, which is more representative / Repartition des hebergements des toursites : 60% au Gosier, 24% à ST François et le reste à Cote sous le vent ie 16% ( en s'appuie sur les chiffres de l'Insee plus représentative
+  let repartition 0
+  set repartition Nb_touristes * 0.6
+  ask n-of repartition turtles with [hebergement = -1] [
+  set hebergement 0
+  ]
+  set repartition Nb_touristes * 0.24
+  ask n-of repartition turtles with [hebergement = -1] [
+  set hebergement 1
+  ]
+  ask turtles with [hebergement = -1] [
+  set hebergement 2
+
+  ]
+  ask turtles with [hebergement = 0] [
+    set list_site [ 3 4 2 5 6 1 7 0]
+    set color lime
+  ]
+ask turtles with [hebergement = 1] [
+    set list_site [ 4 2 3 5 0 6 7 1 ]
+    set color blue
+      ]
+ask turtles with [hebergement = 2] [
+    set list_site [ 0 1 6 3 5 7 4 2 ]
+    set color red
+   ]
+ask turtles [
+  set list_vide 0
+  ]
+ask turtles [
+  set JA random 14
+  ]
+ask turtles [
+    set seuil_taxe random 75
+  ]
+ask turtles [
+    set transport -1
+  ]
+
+
+
+
+;;ask n-of 1 turtles with [insensible_sub = -1 and sensible_sub = -1 ]
+ ;;  [
+  ;;    set insensible_sub 1
+  ;;    set sensible_sub 0
+  ; ]
+
+ ;;ask n-of 1 turtles with [insensible_sub = 1 and sensible_sub = 0 ]
+ ;;  [
+  ;;     set insensible_obj 1
+  ;;    set sensible_obj 0
+ ;; ]
+
+  ;; We characterize the agents that are subjectively quite sensitive (There are 24 of them) / On caractérise les agents qui sont subjectivement assez sensibles ( Il y en a 24)
+  ask n-of 24 turtles with [insensible_sub = -1 and sensible_sub = -1 and sensible_obj = -1 and insensible_obj = -1]
+  [
+    let val 0
+    set val random-float 1
+    while [ val < 0.5  ]
+   [ set val random-float 1 ]
+    set sensible_sub val
+
+   set val random-float 1
+    while [ val >= 0.5 or val = 0 ]
+   [ set val random-float 1 ]
+    set insensible_sub val
+  ]
+
+  ;; Among these 24 agents subjectively quite sensitive, we characterize 4 agents who will be objectively insensitive / not at all sensitive  / Parmis ces 24 agents subjectivement assez sensibles on caractérise 4 agents qui seront objectivement insensibles/ pas du tout sensible
+ ask n-of 4 turtles with [ sensible_sub < 1 and sensible_sub >= 0.5 and insensible_sub > 0 and insensible_sub < 0.5 and sensible_obj = -1 and insensible_obj = -1 ]
+  [
+    set sensible_obj 0
+    set insensible_obj 1
+]
+
+  ;; Among these 24 subjectively quite sensitive agents, 6 agents are characterized which will be objectively insensitive / Parmis ces 24 agents subjectivement assez sensibles on caractérise 6 agents qui seront objectivement peu sensibles
+ ask n-of 6 turtles with [ sensible_sub < 1 and sensible_sub >= 0.5 and insensible_sub > 0 and insensible_sub < 0.5 and sensible_obj = -1 and insensible_obj = -1]
+  [
+    let val 0
+    set val random-float 1
+    while [ val > 0.5  ]
+   [ set val random-float 1 ]
+    set sensible_obj val
+
+   set val random-float 1
+    while [ val <= 0.5 or val = 1 ]
+   [ set val random-float 1 ]
+    set insensible_obj val
+
+]
+
+  ;; Among these 24 agents subjectively quite sensitive, we characterize 6 agents which will be objectively very sensitive / Parmis ces 24 agents subjectivement assez sensibles on caractérise 6 agents qui seront objectivement très sensible
+ ask n-of 6 turtles with [ sensible_sub < 1 and sensible_sub >= 0.5 and insensible_sub > 0 and insensible_sub < 0.5 and sensible_obj = -1 and insensible_obj = -1]
+  [
+    set sensible_obj 1
+    set insensible_obj 0
+]
+
+  ;; Among these 24 agents subjectively quite sensitive, 8 agents are characterized which will be objectively quite sensitive / Parmis ces 24 agents subjectivement assez sensibles on caractérise 8 agents qui seront objectivement assez sensible
+ ask n-of 8 turtles with [ sensible_sub < 1 and sensible_sub >= 0.5 and insensible_sub > 0 and insensible_sub < 0.5 and sensible_obj = -1 and insensible_obj = -1 ]
+  [
+    let val 0
+    set val random-float 1
+    while [ val < 0.5  ]
+   [ set val random-float 1 ]
+    set sensible_obj val
+
+   set val random-float 1
+    while [ val >= 0.5 or val = 0 ]
+   [ set val random-float 1 ]
+    set insensible_obj val
+]
+
+   ;; We characterize the agents that are subjectively insensitive (There are 3 of them) / On caractérise les agents qui sont subjectivement peu sensibles ( Il y en a 3)
+  ask n-of 3 turtles with [insensible_sub = -1 and sensible_sub = -1 and sensible_obj = -1 and insensible_obj = -1]
+  [
+    let val 0
+    set val random-float 1
+    while [ val > 0.5 or val = 0 ]
+   [ set val random-float 1 ]
+    set sensible_sub val
+
+   set val random-float 1
+    while [ val <= 0.5 or val = 1 ]
+   [ set val random-float 1 ]
+    set insensible_sub val
+  ]
+
+    ;; Among these 3 subjectively insensitive agents, 1 agent is characterized as being objectively insensitive / not at all sensitive / Parmis ces 3 agents subjectivement peu sensibles on caractérise 1 agent qui est objectivement insensible / pas du tout sensible
+ ask n-of 1 turtles with [ sensible_sub <= 0.5 and sensible_sub != 0 and insensible_sub < 1 and insensible_sub > 0.5 and sensible_obj = -1 and insensible_obj = -1]
+  [
+    set sensible_obj 0
+    set insensible_obj 1
+]
+
+   ;; Among these 3 subjectively insensitive agents, we characterize 2 agents which will be objectively quite sensitive / Parmis ces 3 agents subjectivement peu sensibles on caractérise 2 agents qui seront objectivement assez sensibles
+ ask n-of 2 turtles with [ sensible_sub <= 0.5 and sensible_sub != 0 and insensible_sub < 1 and insensible_sub > 0.5 and sensible_obj = -1 and insensible_obj = -1 ]
+  [
+    let val 0
+    set val random-float 1
+    while [ val < 0.5  ]
+   [ set val random-float 1 ]
+    set sensible_obj val
+
+   set val random-float 1
+    while [ val >= 0.5 or val = 0 ]
+   [ set val random-float 1 ]
+    set insensible_obj val
+
+    if Communication?
+    [
+       set val random-float 1
+    while [ val < 0.5  ]
+   [ set val random-float 1 ]
+    set sensible_sub val
+
+   set val random-float 1
+    while [ val >= 0.5 or val = 0 ]
+   [ set val random-float 1 ]
+    set insensible_sub val
+
+
+    ]
+
+]
+
+  ;; We characterize the agents that are subjectively not at all sensitive / On caractérise les agents qui sont subjectivement pas du tout sensibles
+  ask n-of 1 turtles with [insensible_sub = -1 and sensible_sub = -1 and sensible_obj = -1 and insensible_obj = -1]
+  [
+    set insensible_sub 1
+    set sensible_sub 0
+  ]
+  ;; Cet agent qui est  pas du tout sensible subjectivement est peu sensible objectivement
+  ask n-of 1 turtles with [insensible_sub = 1 and sensible_sub = 0 and sensible_obj = -1 and insensible_obj = -1]
+  [
+    let val 0
+    set val random-float 1
+    while [ val > 0.5  ]
+   [ set val random-float 1 ]
+    set sensible_obj val
+
+   set val random-float 1
+    while [ val <= 0.5 or val = 1 ]
+   [ set val random-float 1 ]
+    set insensible_obj val
+  ]
+
+   ;; This agent which is not at all sensitive subjectively is not very sensitive objectively / On caractérise les agents qui sont subjectivement très sensibles (72 agents)
+  ask n-of 72 turtles with [insensible_sub = -1 and sensible_sub = -1 and sensible_obj = -1 and insensible_obj = -1]
+  [
+    set insensible_sub 0
+    set sensible_sub 1
+  ]
+
+
+   ;; Among these 72 subjectively very sensitive agents, 28 agents are characterized which will be objectively quite sensitive / Parmis ces 72 agents subjectivement très sensibles on caractérise 28 agents qui seront objectivement assez sensibles
+    ask n-of 28 turtles with [insensible_sub = 0 and sensible_sub = 1 and sensible_obj = -1 and insensible_obj = -1 ]
+  [
+    let val 0
+    set val random-float 1
+    while [ val < 0.5  ]
+   [ set val random-float 1 ]
+    set sensible_obj val
+
+   set val random-float 1
+    while [ val >= 0.5 or val = 0 ]
+   [ set val random-float 1 ]
+    set insensible_obj val
+
+]
+   ;; Among these 72 subjectively very sensitive agents, 11 agents are characterized which will be objectively insensitive / Parmis ces 72 agents subjectivement très sensibles on caractérise 11 agents qui seront objectivement peu sensibles
+  ask n-of 11 turtles with [insensible_sub = 0 and sensible_sub = 1 and sensible_obj = -1 and insensible_obj = -1]
+  [
+    let val 0
+    set val random-float 1
+    while [ val > 0.5  ]
+   [ set val random-float 1 ]
+    set sensible_obj val
+
+   set val random-float 1
+    while [ val <= 0.5 or val = 1 ]
+   [ set val random-float 1 ]
+    set insensible_obj val
+  ]
+  ;; Among these 72 subjectively very sensitive agents, 17 agents are characterized as being objectively very sensitive / Parmis ces 72 agents subjectivement très sensibles on caractérise 17 agents qui seront objectivement très sensibles
+   ask n-of 17 turtles with [ sensible_sub = 1 and insensible_sub = 0 and sensible_obj = -1 and insensible_obj = -1]
+  [
+    set sensible_obj 1
+    set insensible_obj 0
+]
+
+  ;; Among these 72 subjectively very sensitive agents, 16 agents are characterized which will be objectively not at all sensitive / Parmis ces 72 agents subjectivement très sensibles on caractérise 16 agents qui seront objectivement pas du tout sensibles
+   ask n-of 16 turtles with [ sensible_sub = 1 and insensible_sub = 0  and sensible_obj = -1 and insensible_obj = -1]
+  [
+    set sensible_obj 0
+    set insensible_obj 1
+]
+
+   ask turtles [
+        
+
+    ifelse (sensible_sub * 0.1 + sensible_obj * 0.9)  > (insensible_sub * 0.1 + insensible_obj * 0.9)* 3  [  set radin_ecolo 1 ]
+      [ set radin_ecolo 0 ]
+
+   ;; print ((sensible_sub + sensible_obj) / 2)
+
+  ]
+
+ print count turtles with [radin_ecolo = 1]
+
+;; Repartition2 corresponds to the number of tourists who will take the thermal car, bus, electric car / correspond aux nombres de touristiques qui va prendre la voiture thermique, bus, voiture electrique
+  let repartition2 0
+
+  ;; We have both buses and electric cars available / On a a la fois des bus et des voitures electriques disponibles
+ ifelse Bus?  and Ve?
+  [
+  set repartition2  count turtles  with  [transport = -1 and radin_ecolo = 1]  * 0.9
+  ask n-of repartition2 turtles with [transport = -1 and radin_ecolo = 1]
+  [ set transport 2 ]
+
+  set repartition2  count turtles  with  [transport = -1 and radin_ecolo = 1]
+
+  ask n-of repartition2 turtles with [transport = -1 and radin_ecolo = 1]
+       [set transport 3]
+  ask turtles with [transport = -1 ] [set transport 1 ]
+
+  if reseau_bus_actuel
+    [ ask turtles with [(transport = 2 and hebergement = 2) or (transport = 2 and hebergement = 1) ]
+
+      [ set transport 1]
+    ]
+
+
+  set take_bus count turtles with [transport = 2 ]
+  set take_car count turtles with  [transport = 1 ]
+  set take_electric_car count turtles with  [transport = 3 ]
+
+]
+
+
+[
+ifelse Bus?  and not Ve?
+
+    ;;all eco-friendly take the bus / tous les écolos prennent le bus
+
+[
+      set repartition2  count turtles  with  [transport = -1 and radin_ecolo = 1]
+
+      ask n-of repartition2 turtles with [radin_ecolo = 1]
+      [set transport 2]
+
+      ask turtles with [transport != 2]
+      [set transport 1]
+
+
+      if reseau_bus_actuel
+      [ ask turtles with [(transport = 2 and hebergement = 2) or (transport = 2 and hebergement = 1) ]
+
+        [ set transport 1]
+      ]
+
+      set take_bus count turtles with [transport = 2]
+      set take_car count turtles with [transport = 1]
+
+    ]
+
+    [
+      if  Ve? and  not Bus?
+      ;; if there is no bus 10% of green people take an electric car / s'il ny a pas de bus 10% des écolos prennent une voiture électrique
+      ;;les autres  écolos prennent la voiture thermique à contre-coeurs
+[
+
+        set repartition2  count turtles  with  [transport = -1 and radin_ecolo = 1]  * 0.1
+
+        ask n-of repartition2 turtles with [transport = -1 and radin_ecolo = 1]
+        [ set transport 3 ]
+
+        ask turtles  with [transport = -1]
+        [set transport 1]
+    ;;
+        set take_car count turtles with [transport = 1 ]
+        set take_electric_car count turtles with  [transport = 3 ]
+
+      ]
+
+      if not Ve? and not Bus?
+      ;; if there are only thermal cars, green people take the thermal car reluctantly, just like non-green people / s'il n'y a que des voitures thermiques, les écolos prennent la voiture thermique à contre-coeurs, tout comme les non-écolos
+      [
+        ask turtles
+        [set transport 1]
+
+        set take_car count turtles
+
+      ]
+
+    ]
+
+]
+
+end
+
+to visite
+  if JA <= ticks [ ;; if the tourist has arrived / si le touriste est arrivé
+    ;; travel to his place of accommodation / deplacement vers son lieu d'hebergement
+    if ticks = JA [
+    if hebergement = 0 [
+   move-to patch 6 -7
+      set dist dist + item hebergement dist_aero
+    ]
+    if hebergement = 1 [
+    move-to patch 15 -4
+      set dist dist + item hebergement dist_aero
+    ]
+    if hebergement = 2 [
+    move-to patch -15 11
+      set dist dist + item hebergement dist_aero
+    ]
+    ]
+    ;; if the tourist is still in Guadeloupe and if he has not finished seeing all the sites on his list / si le touriste est encore en guadeloupe et s'il n'a pas fini de voir tous les sites de sa liste
+    if (ticks < ( JA + 15 ) ) and ( empty? list_site = false ) [
+   let site -1
+     set site first list_site
+
+    ;;  the first 5 days the green tourist in Le Gosier takes the car to go to the furthest sites (not served by the current bus network) /les 5 premiers jours le touriste écolo au Gosier prend la voiture pour aller aux sites les plus loins ( non desservis par le reseau de bus actuel)
+    if (ticks <= (JA + 5)) and ( hebergement = 0) and (transport = 2 ) and Bus? and reseau_bus_actuel
+     [ set transport 1 ]
+
+    if (ticks > (JA + 5)) and (hebergement = 0) and (radin_ecolo = 1) and (transport = 1) and Bus? and reseau_bus_actuel
+      [ set transport 2 ]
+
+
+     ;; calculates the distance traveled between the accommodation and the site for tourists who have cars, whether thermal (radin_ecolo =0) or electric (transport =3) / calcule la distance parcourue entre l'hebergement et le site pour les touristes qui ont des voitures, qu"elles soient thermique (radin_ecolo =0) ou electrique (transport =3)
+      if (radin_ecolo = 0)  [
+       set distance_voiture_t dist + matrix:get m1 hebergement site
+      ]
+
+
+      if (radin_ecolo = 1) and (transport = 3) [
+       set distance_voiture_e dist + matrix:get m1 hebergement site
+      ]
+
+
+    ;; calculation of the distance traveled between the accommodation and the site for tourists who take the bus. Attention: we remove tourist sites that are not on the Bus line (site number 4, 6 and 7) / calcul la distance parcourue entre l'hebergement et le site pour les touristes qui prennent le bus. Attention: on supprime les sites touristiques qui ne sont pas sur la ligne de Bus (site numero 4, 6 et 7)
+
+     if transport = 2 [
+
+      let site1_supprime 3
+      let site2_supprime 4
+      Let site3_supprime 5
+      let list_site_modif remove site1_supprime list_site
+      set  list_site list_site_modif
+      set list_site_modif remove site2_supprime list_site
+      set  list_site list_site_modif
+      set list_site_modif remove site3_supprime list_site
+      set  list_site list_site_modif
+      set site first list_site
+
+      set distance_bus dist + ( matrix:get m1 hebergement site)
+      ]
+
+
+      ;; effective travel to the tourist site / deplacment effectif vers le site touristique
+
+      move-to one-of patches with [pcolor = item site color_site ]
+
+
+
+      ;; if number of tourists > capacity of the site, it looks for the nearest site / si nombre de touristes > capacité du site, il cherche le site le plus proche
+
+      ifelse ( count turtles with [ pcolor = item site color_site] ) > item site liste_capacite   [
+        ;;; search in the matrix m1 for the smallest distance between the site where it is and the surrounding site / recherche dans la matrice m1 de la distance la plus petite entre le site ou il est et le site aux alentours
+       let dist_min 1000
+        let site_2 site
+        let i 0
+        while [ i < 8 ] [
+          if i != site and matrix:get m1 site i < dist_min [
+          set dist_min matrix:get m1 site i
+            set site_2 i
+          ]
+       set i i + 1
+        ]
+        ;;; moving to the nearest site and adding the distance traveled / déplacement vers le site le plus proche et rajout de la distance parcourue
+      move-to one-of patches with [pcolor = item site_2 color_site ]
+        if (transport = 1) [
+      set distance_voiture_t distance_voiture_t + matrix:get m1 site site_2
+        ]
+
+        if (transport = 3) [
+        set distance_voiture_e distance_voiture_e + matrix:get m1 site site_2
+        ]
+
+        ;; return accommodation + distance traveled / retour hebergement + distance parcourue
+        let num_hebergement hebergement
+       move-to one-of patches with [pcolor = item num_hebergement color_site ]
+        if (transport = 1) [
+      set distance_voiture_t distance_voiture_t + matrix:get m1 site_2 hebergement
+        ]
+       if (transport = 3)  [
+      set distance_voiture_e distance_voiture_e + matrix:get m1 site_2 hebergement
+        ]
+
+    let list_site_modif remove site_2 list_site
+      set list_site list_site_modif
+      ]
+     [
+        let num_hebergement hebergement
+        move-to one-of patches with [pcolor = item num_hebergement color_site ]
+        if (transport = 1) [
+        set distance_voiture_t distance_voiture_t + matrix:get m1 site hebergement
+        ]
+        if (transport = 3) [
+        set distance_voiture_e distance_voiture_e + matrix:get m1 site hebergement
+        ]
+
+        let list_site_modif remove site list_site
+        set list_site list_site_modif
+
+      ]
+
+    ]
+    ifelse empty? list_site = false  [
+  set list_vide 1
+  ]
+  [ set distot_bus distot_bus + distance_bus
+   set distot_vt distot_vt + distance_voiture_t
+   set distot_ve distot_ve + distance_voiture_e
+    ]
+
+  ]
+
+
+end
+
+to save_file_dist_bus
+  file-open "Distot_bus.txt"
+  file-write distot_bus
+  file-print " "
+  file-close
+end
+
+to close_file_dist_bus
+   file-open "Distot_bus.txt"
+  file-write "nouvelle simulation"
+  file-print " "
+  file-close
+
+end
+
+to save_file_dist_vt
+  file-open "Distot_vt.txt"
+  file-write distot_vt
+  file-print " "
+  file-close
+end
+
+to close_file_dist_vt
+   file-open "Distot_vt.txt"
+  file-write "nouvelle simulation"
+  file-print " "
+  file-close
+
+end
+
+to save_file_dist_ve
+  file-open "Distot_ve.txt"
+  file-write distot_ve
+  file-print " "
+  file-close
+end
+
+to close_file_dist_ve
+   file-open "Distot_ve.txt"
+  file-write "nouvelle simulation"
+  file-print " "
+  file-close
+
+end
+
+
+
+to go
+  ifelse ticks > 29 [
+   save_file_info_touriste
+   close_file_dist_bus
+    close_file_dist_ve
+    close_file_dist_vt
+    close_file_info_touriste
+    stop
+  ]
+ [ ask turtles  [visite]
+;;  ask n-of 1 turtles with [hebergement = 0 ] [
+  ;; print ticks
+    ;;  print JA
+      ;; print list_site
+      ;; print dist
+  ;; ]
+;; print distot
+ save_file_dist_bus
+ save_file_dist_vt
+ save_file_dist_ve
+  ]
+
+
+  tick
+
+
+end
+
+to save_file_info_touriste
+  file-open "Info_touriste.txt"
+  ask turtles [
+    file-write sensible_obj
+    file-write sensible_sub
+    file-write insensible_obj
+    file-write insensible_sub
+    file-print " "
+   ]
+
+  file-close
+end
+
+to close_file_info_touriste
+   file-open "Info_touriste.txt"
+  file-write "nouvelle simulation"
+  file-print " "
+  file-close
+
+end
